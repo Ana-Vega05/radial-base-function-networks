@@ -56,6 +56,25 @@ def action_btn(parent, text: str, command=None,
         padx=16, pady=6,
     )
 
+def primary_btn(parent, text: str, command=None) -> tk.Button:
+    """Botón con color de acento principal (azul)."""
+    return action_btn(parent, text, command, color=ACCENT)
+
+def success_btn(parent, text: str, command=None) -> tk.Button:
+    """Botón para acciones de éxito (verde)."""
+    return action_btn(parent, text, command, color=SUCCESS)
+
+def danger_btn(parent, text: str, command=None) -> tk.Button:
+    """Botón para acciones peligrosas (rojo)."""
+    return action_btn(parent, text, command, color=DANGER)
+
+def panel_btn(parent, text: str, command=None) -> tk.Button:
+    """Botón estilo panel oscuro (usado en elección aleatoria, etc.)."""
+    return action_btn(parent, text, command, color=BG_PANEL, fg=TEXT_MAIN)
+
+def dark_btn(parent, text: str, command=None) -> tk.Button:
+    """Botón con fondo oscuro, usado para acciones secundarias."""
+    return action_btn(parent, text, command, color=BG_DARK, fg=TEXT_MAIN)
 
 
 class Sidebar(tk.Frame):

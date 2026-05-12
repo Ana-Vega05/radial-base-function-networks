@@ -16,7 +16,7 @@ from tkinter import ttk
 
 from styles import apply_ttk_styles, BG_DARK
 from widgets import Sidebar, StatusBar
-from src.page_configuracion import PageConfiguracion
+from page_configuracion import PageConfiguracion
 from src.page_estadisticas   import PageEstadisticas
 from src.page_entrenamiento  import PageEntrenamiento
 from src.page_simulacion     import PageSimulacion
@@ -67,7 +67,7 @@ class RBFApp(tk.Tk):
             PageSimulacion,
             PageEvaluacion,
         ]
-        uses_state = {0, 1, 4}
+        uses_state = {0, 1, 2, 3, 4}
 
         self.pages = []
         for i, Cls in enumerate(page_classes):

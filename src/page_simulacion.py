@@ -1,107 +1,144 @@
 # -*- coding: utf-8 -*-
-"""Página 5 – Simulación del Modelo."""
+"""Página – Simulación del Modelo RBF (refactorizada)."""
 
 import tkinter as tk
 import numpy as np
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
 
 from styles import (
-    BG_DARK, BG_CARD, ACCENT, ACCENT2, TEXT_MAIN, TEXT_DIM, SUCCESS, BORDER,
-    FONT_TITLE, FONT_SMALL,
+    BG_DARK, TEXT_MAIN, TEXT_DIM, SUCCESS, WARNING, FONT_TITLE, FONT_SMALL
 )
-from widgets import card, section_label, separator, labeled_entry, labeled_combo, action_btn
+from widgets import card
+from panels.simulacion_left import PanelSimulacionLeft
+from panels.simulacion_right import PanelSimulacionRight
 
 
 class PageSimulacion(tk.Frame):
-    def __init__(self, parent, status_bar):
+    def __init__(self, parent, status_bar, app_state: dict):
         super().__init__(parent, bg=BG_DARK)
         self.status = status_bar
+        self.app_state = app_state
         self._build()
 
     def _build(self):
-        tk.Label(self, text="Simulación del Modelo", bg=BG_DARK, fg=TEXT_MAIN,
-                 font=FONT_TITLE).pack(anchor="w", padx=24, pady=(20, 4))
-        tk.Label(self,
-                 text="Ingrese valores de entrada para obtener una predicción del modelo RBF.",
-                 bg=BG_DARK, fg=TEXT_DIM, font=FONT_SMALL).pack(anchor="w", padx=24)
+        tk.Label(self, text="Simulación del Modelo",bg=BG_DARK, fg=TEXT_MAIN, font=FONT_TITLE).pack(anchor="w", padx=24, pady=(20, 2))
+        tk.Label(self,text="Ingrese valores de entrada para obtener la predicción del modelo RBF entrenado.",bg=BG_DARK, fg=TEXT_DIM, font=FONT_SMALL).pack(anchor="w", padx=24)
 
-        # ── Panel izquierdo: entradas ──
-        left = card(self)
-        left.place(relx=0.01, rely=0.12, relwidth=0.38, relheight=0.82)
-        section_label(left, "Valores de Entrada")
-        separator(left)
+        # Panel izquierdo
+        self.left = PanelSimulacionLeft(
+            self, self.app_state,
+            on_simular=self._simular,
+            on_limpiar=self._limpiar)
+        self.left.place(relx=0.01, rely=0.12, relwidth=0.36, relheight=0.86)
 
-        self.sim_entries: dict = {}
-        for f in ["sepal_length", "sepal_width", "petal_length", "petal_width"]:
-            self.sim_entries[f] = labeled_entry(left, f"{f}:", "0.0")
+        # Panel derecho
+        self.right = PanelSimulacionRight(self)
+        self.right.place(relx=0.38, rely=0.12, relwidth=0.61, relheight=0.86)
 
-        separator(left)
-        self.mode_var = labeled_combo(
-            left, "Fuente de datos:",
-            ["Entrada manual", "Conjunto de prueba", "Cargar CSV"], 0)
-        separator(left)
+        # Configurar evento de cambio de modo
+        self.left.mode_var.trace_add("write", self._on_mode_change)
+        # Configurar comando del botón "Cargar patrón"
+        self.left.set_load_patron_command(self._cargar_patron)
 
-        btn_row = tk.Frame(left, bg=BG_CARD)
-        btn_row.pack(fill="x", padx=12, pady=10)
-        action_btn(btn_row, "▶  Simular",
-                   command=self._simular, color=SUCCESS).pack(side="left")
-        action_btn(btn_row, "Limpiar",
-                   command=self._limpiar, color=BG_DARK).pack(side="left", padx=(8, 0))
+    def on_show(self):
+        self.left.build_entries()  # actualiza las entradas según la configuración
 
-        # ── Panel derecho: resultado ──
-        right = card(self)
-        right.place(relx=0.41, rely=0.12, relwidth=0.58, relheight=0.82)
-        section_label(right, "Resultado de la Predicción")
-        separator(right)
+    # Manejo de modo y patrón
 
-        res_box = tk.Frame(right, bg=BG_DARK, height=80)
-        res_box.pack(fill="x", padx=12, pady=8)
-        self.pred_lbl = tk.Label(res_box, text="—", bg=BG_DARK, fg=ACCENT2,
-                                 font=("Segoe UI", 28, "bold"))
-        self.pred_lbl.pack(pady=16)
+    def _on_mode_change(self, *_):
+        modo = self.left.mode_var.get()
+        if modo == "Entrada manual":
+            self.left.show_pattern_controls(False)
+        else:
+            self.left.show_pattern_controls(True)
+            self._actualizar_limite_spin()
+            # Cargar automáticamente el primer patrón
+            self._cargar_patron()
 
-        separator(right)
-        section_label(right, "Probabilidades por Clase")
-        separator(right)
-        self._build_bar(right)
+    def _actualizar_limite_spin(self):
+        modo = self.left.mode_var.get()
+        splits = self.app_state.get("splits", {})
+        key = "X_test" if modo == "Conjunto de prueba" else "X_val"
+        Xp = splits.get(key)
+        limite = Xp.shape[0] if Xp is not None else 1
+        self.left.set_spin_max(limite)
 
-    def _build_bar(self, parent):
-        self.fig_bar = Figure(figsize=(5, 3), facecolor=BG_CARD)
-        self.ax_bar  = self.fig_bar.add_subplot(111)
-        self.ax_bar.set_facecolor(BG_DARK)
-        classes = ["Setosa", "Versicolor", "Virginica"]
-        self.bars = self.ax_bar.barh(classes, [0.0, 0.0, 0.0],
-                                     color=ACCENT, height=0.5)
-        self.ax_bar.set_xlim(0, 1)
-        self.ax_bar.set_xlabel("Probabilidad", color=TEXT_DIM, fontsize=9)
-        self.ax_bar.tick_params(colors=TEXT_DIM)
-        for spine in self.ax_bar.spines.values():
-            spine.set_edgecolor(BORDER)
-        self.fig_bar.tight_layout(pad=1.5)
-        self.canvas_bar = FigureCanvasTkAgg(self.fig_bar, master=parent)
-        self.canvas_bar.draw()
-        self.canvas_bar.get_tk_widget().pack(fill="both", expand=True, padx=12, pady=4)
+    def _cargar_patron(self):
+        modo = self.left.mode_var.get()
+        splits = self.app_state.get("splits", {})
+        key_X = "X_test" if modo == "Conjunto de prueba" else "X_val"
+        key_Y = "Yd_test" if modo == "Conjunto de prueba" else "Yd_val"
+        Xp = splits.get(key_X)
+        Yp = splits.get(key_Y)
 
-    # ── Acciones ──────────────────────────────────────────────────────────────
+        if Xp is None:
+            self.status.set("Sin particiones — entrene el modelo primero.", "warn")
+            return
+
+        idx = self.left.get_spin_value() - 1
+        idx = max(0, min(idx, Xp.shape[0] - 1))
+        patron = Xp[idx]
+        cfg = self.app_state.get("config")
+        cols = list(cfg.input_columns) if cfg else list(self.left.sim_entries.keys())
+
+        self.left.set_entries_from_patron(patron, cols)
+
+        # Clase real
+        if Yp is not None and Yp.shape[0] > idx:
+            if Yp.shape[1] == 1:
+                clase_real = int(Yp[idx, 0])
+            else:
+                clase_real = int(np.argmax(Yp[idx]))
+            self.right.set_real_class(clase_real)
+        else:
+            self.right.clear_real_class()
+
+    # Simulación
 
     def _simular(self):
-        probs     = np.random.dirichlet([3, 1, 1])
-        classes   = ["Setosa", "Versicolor", "Virginica"]
-        predicted = classes[int(np.argmax(probs))]
-        self.pred_lbl.configure(text=predicted)
-        for bar, p in zip(self.bars, probs):
-            bar.set_width(p)
-        for bar, p in zip(self.bars, probs):
-            bar.set_color(SUCCESS if p == max(probs) else ACCENT)
-        self.canvas_bar.draw()
-        self.status.set(
-            f"Predicción: {predicted}  (confianza: {max(probs):.1%})", "ok")
+        modelo = self.app_state.get("modelo")
+        cfg = self.app_state.get("config")
+
+        if modelo is None:
+            self.status.set("Sin modelo — entrene primero en la pestaña Entrenamiento.", "warn")
+            self.right.clear()
+            return
+
+        try:
+            entrada = np.array(self.left.get_entry_values(), dtype=np.float64).reshape(1, -1)
+        except (ValueError, KeyError):
+            self.status.set("Valores de entrada inválidos.", "error")
+            return
+
+        Yr = modelo.predict(entrada)
+        n_salidas = Yr.shape[1]
+
+        if n_salidas == 1:
+            score = float(Yr[0, 0])
+            predicted = 1 if score >= 0.5 else 0
+            scores = np.array([1.0 - score, score])
+            clases = ["Clase 0", "Clase 1"]
+            conf = max(scores)
+        else:
+            scores = Yr[0]
+            predicted = int(np.argmax(scores))
+            sc_min, sc_max = scores.min(), scores.max()
+            if sc_max > sc_min:
+                probs = (scores - sc_min) / (sc_max - sc_min)
+            else:
+                probs = np.ones_like(scores) / len(scores)
+            scores = probs
+            clases = [f"Clase {k}" for k in range(n_salidas)]
+            conf = float(scores[predicted])
+
+        self.right.set_prediction(predicted, conf)
+        self.right.update_bar_chart(clases, scores, predicted)
+        self.right.show_yr_raw(Yr[0], clases)
+
+        self.status.set(f"Predicción: Clase {predicted}  (score = {conf:.4f})", "ok")
+
+    # Limpiar
 
     def _limpiar(self):
-        for var in self.sim_entries.values():
-            var.set("0.0")
-        self.pred_lbl.configure(text="—")
-        for bar in self.bars:
-            bar.set_width(0)
-        self.canvas_bar.draw()
+        self.left.clear_entries()
+        self.right.clear()
+        self.status.set("Campos limpios.")

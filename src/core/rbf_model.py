@@ -65,7 +65,7 @@ class RBFNetwork:
         A, D, FA= self._construir_matriz_activacion(X, self.centros)  # (n_patrones, n_centros + 1)
         Y_pred = A @ self.pesos  # (n_patrones, n_salidas)
         if verbose:
-            self._imprimir_detalle_simulacion(X, A, D, FA, Y_pred)
+            self._imprimir_detalle_simulacion(X, D, FA, A, Y_pred)
 
         return Y_pred
     
@@ -78,6 +78,7 @@ class RBFNetwork:
     def _imprimir_detalle_entrenamiento(self, X_train, Yd_train, A, D, FA):
         n_centros = self.centros.shape[0]
         n_patrones = X_train.shape[0]
+        n_salidas  = self.pesos.shape[1]
 
         sep = '-' * 60
         print(f"\n{sep}")
@@ -90,66 +91,74 @@ class RBFNetwork:
             vals = " ".join(f"{v:.4f}" for v in r)
             print(f"R{j+1}: {vals}")
         
-        #Distancias
+        # Distancias (primeros 10 patrones para no saturar el log)
+        muestra = min(n_patrones, 10)
         print(f"\nMatriz de distancias D [n_patrones={n_patrones} x n_centros={n_centros}]:")
         header = " Patron "+ " ".join(f"DP,R{j+1}" for j in range(n_centros))
         print(header)
-        for i in range(n_patrones):
+        for i in range(muestra):
             fila = f"{i+1: >3}"
             for j in range(n_centros):
-                fila += f" {D[i, j]:8.4f}"
+                fila += f"  {D[i,j]:7.4f}"
             print(fila)
         
         #Activaciones FA
-        print(f"\nFuncion de Activacion FA(D) = D^2 * log(D):")
-        header = "    Patrón" + "".join(f"  FA(P,R{j+1})" for j in range(n_centros))
-        print(header)
-        for i in range(n_patrones):
-            fila = f"    P{i+1:>3}"
-            for j in range(n_centros):
-                fila += f"   {FA[i,j]:8.4f}"
-            print(fila)
+        print(f"\nFA(D) = D² · ln(D) (primeros {muestra} patrones):")
+        for i in range(muestra):
+                fila = f"  P{i+1:>3}"
+                for j in range(n_centros):
+                    fila += f"  {FA[i,j]:8.4f}"
+                print(fila)
         # Matriz A
         print(f"\nMatriz de Interpolacion A = [1 | FA] [{n_patrones} x ({n_centros} + 1)]:")
         print("    Patrón   bias" + " ".join(f"FA(P,R{j+1})" for j in range(n_centros)))
         print(header)
-        for i in range(n_patrones):
+        for i in range(muestra):
             fila = f"    P{i+1:>3}  "
             fila += "  ".join(f"{A[i,k]:8.4f}" for k in range(A.shape[1]))
             print(fila)
         
         # Pesos
-        print(f"\nSistema A·W = Yd -> W = pinv(A)·Yd:")
-        print(f"Wo (bias) = {self.pesos[0, 0]:.6f}")
+        print(f"\nW = pinv(A)·Yd  [{n_centros+1} × {n_salidas}]:")
+        etiquetas = [f"Sal{k}" for k in range(n_salidas)] if n_salidas > 1 else [""]
+        print(f"  {'Peso':<10}  " + "  ".join(f"{e:>10}" for e in etiquetas))
+        print(f"  {'Wo (bias)':<10}  " + "  ".join(f"{self.pesos[0,k]:10.6f}" for k in range(n_salidas)))
         for j in range(n_centros):
-            print(f"    W{j+1}         = {self.pesos[j+1, 0]:.6f}")
+            print(f"  {'W'+str(j+1):<10}  " + "  ".join(f"{self.pesos[j+1,k]:10.6f}" for k in range(n_salidas)))
         
         # Yr y EL
         Yr = A @ self.pesos
         EL = Yd_train - Yr
-        print(f"\nSimulación sobre entrenamiento (Yr vs Yd):")
-        print(f"    {'Patrón':>7}  {'Yr':>10}  {'Yd':>10}  {'EL = Yd-Yr':>12}")
-        for i in range(n_patrones):
-            print(f"    P{i+1:>3}    {Yr[i,0]:10.4f}  {Yd_train[i,0]:10.4f}  {EL[i,0]:12.4f}")
-
         EG = float(np.mean(np.abs(EL)))
-        print(f"\n    EG = Σ|EL| / N = {EG:.6f}")
+        print(f"\nSimulación entrenamiento — EG = {EG:.6f}")
+        if n_salidas == 1:
+            print(f"  {'Patrón':>7}  {'Yr':>10}  {'Yd':>10}  {'EL':>12}")
+            for i in range(muestra):
+                print(f"  P{i+1:>5}  {Yr[i,0]:10.4f}  {Yd_train[i,0]:10.4f}  {EL[i,0]:12.4f}")
+        else:
+            enc = [f"Yr_c{k}" for k in range(n_salidas)]
+            print(f"  {'Patrón':>7}  " + "  ".join(f"{e:>8}" for e in enc) + "  Clase_pred  Clase_real")
+            for i in range(muestra):
+                yr_str  = "  ".join(f"{Yr[i,k]:8.4f}" for k in range(n_salidas))
+                pred    = int(np.argmax(Yr[i]))
+                real    = int(np.argmax(Yd_train[i]))
+                print(f"  P{i+1:>5}  {yr_str}  {pred:>10}  {real:>10}")
         print(sep)
 
     def _imprimir_detalle_simulacion(self, X, D, FA, A, Yr):
-        n_centros = self.centros.shape[0]
+        n_centros  = self.centros.shape[0]
         n_patrones = X.shape[0]
         sep = "─" * 60
         print(f"\n{sep}")
         print("  DETALLE DE SIMULACIÓN (modo verbose)")
         print(sep)
-        print(f"\n▶ Distancias D y activaciones FA para {n_patrones} patrones:")
-        for i in range(n_patrones):
+        muestra = min(n_patrones, 10)
+        for i in range(muestra):
             partes_d  = "  ".join(f"D{j+1}={D[i,j]:.4f}"  for j in range(n_centros))
             partes_fa = "  ".join(f"FA{j+1}={FA[i,j]:.4f}" for j in range(n_centros))
-            print(f"    P{i+1:>3}: {partes_d}")
-            print(f"          {partes_fa}")
-            print(f"          Yr = {Yr[i,0]:.4f}")
+            yr_str    = "  ".join(f"Yr_c{k}={Yr[i,k]:.4f}" for k in range(Yr.shape[1]))
+            print(f"  P{i+1:>3}: {partes_d}")
+            print(f"         {partes_fa}")
+            print(f"         {yr_str}")
         print(sep)
-
 

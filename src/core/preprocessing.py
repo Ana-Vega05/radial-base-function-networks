@@ -6,6 +6,8 @@ import numpy as np
 def split_dataset(X: np.ndarray, Yd: np.ndarray, tipo_particion: str, random_state: Optional[int]) -> dict:
     """
     Divide el dataset en entrenamiento, validación y prueba.
+    Soporta Yd binario (n, 1) y Yd one-hot multiclase (n, n_clases).
+    En ambos casos aplica stratify para mantener distribución de clases.
     
     Args:
         X: matriz de entradas (n_patrones, n_entradas)
@@ -28,12 +30,12 @@ def split_dataset(X: np.ndarray, Yd: np.ndarray, tipo_particion: str, random_sta
     else:
         raise ValueError(f"Tipo de partición no soportado: {tipo_particion}")
     
-    # Verificar que Yd sea 1D para stratify (si es clasificación)
-    # Si es multi-columna, usaremos solo la primera (o convertimos en etiquetas)
+    # Etiquetas de clase para stratify
+    # Binario  → ravel directo
+    # One-hot  → argmax para recuperar la clase entera
     if Yd.shape[1] == 1:
-        stratify_labels = Yd.ravel()
+        stratify_labels = Yd.ravel().astype(int)
     else:
-        # Para salidas multiclase codificadas, convertir a etiquetas
         stratify_labels = np.argmax(Yd, axis=1)
     
     # Primera división: train+val vs test
